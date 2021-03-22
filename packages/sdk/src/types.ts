@@ -228,6 +228,7 @@ export type ConnectionOptions = {
   timeout?: number;
   e2ee?: boolean;
   signalingNotifyMetadata?: JSONType;
+  kohakuURL?: string;
 };
 
 export type Callbacks = {

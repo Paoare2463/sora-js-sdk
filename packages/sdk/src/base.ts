@@ -17,6 +17,7 @@ import {
   SignalingUpdateMessage,
   SignalingNotifyMessage,
 } from "./types";
+import Kohaku from "@sora/kohaku";
 import SoraE2EE from "@sora/e2ee";
 
 // Override from @type/WebRTC
@@ -50,6 +51,7 @@ export default class ConnectionBase {
   protected ws: WebSocket | null;
   protected callbacks: Callbacks;
   protected e2ee: SoraE2EE | null;
+  protected kohaku: Kohaku | null;
 
   constructor(
     signalingUrl: string,
@@ -90,6 +92,7 @@ export default class ConnectionBase {
     };
     this.authMetadata = null;
     this.e2ee = null;
+    this.kohaku = null;
   }
 
   on<T extends keyof Callbacks, U extends Callbacks[T]>(kind: T, callback: U): void {
@@ -156,6 +159,9 @@ export default class ConnectionBase {
       this.e2ee.terminateWorker();
       this.e2ee = null;
     }
+    if (this.kohaku) {
+      this.kohaku.stop();
+    }
     return Promise.all([closeStream, closeWebSocket, closePeerConnection]);
   }
 
@@ -179,6 +185,24 @@ export default class ConnectionBase {
       this.e2ee.clearWorker();
       const result = this.e2ee.start(this.connectionId);
       this.e2ee.postSelfSecretKeyMaterial(this.connectionId, result.selfKeyId, result.selfSecretKeyMaterial);
+    }
+  }
+
+  protected setupKohaku(): void {
+    if (this.options.kohakuURL) {
+      this.kohaku = new Kohaku(this.options.kohakuURL, "SORA_JS_SDK_VERSION");
+    }
+  }
+
+  protected startKohaku(): void {
+    if (
+      this.kohaku &&
+      this.channelId !== null &&
+      this.connectionId !== null &&
+      this.clientId !== null &&
+      this.pc !== null
+    ) {
+      this.kohaku.start(this.channelId, this.connectionId, this.clientId, this.pc);
     }
   }
 
@@ -369,6 +393,8 @@ export default class ConnectionBase {
     return new Promise((resolve, reject) => {
       // connectionState が存在しない場合はそのまま抜ける
       if (this.pc && this.pc.connectionState === undefined) {
+        this.setupKohaku();
+        this.startKohaku();
         resolve();
       }
       const timerId = setInterval(() => {
@@ -384,6 +410,8 @@ export default class ConnectionBase {
           reject(error);
         } else if (this.pc && this.pc.connectionState === "connected") {
           clearInterval(timerId);
+          this.setupKohaku();
+          this.startKohaku();
           resolve();
         }
       }, 100);

@@ -36,6 +36,7 @@
     "typescript": "^4.2.2"
   },
   "dependencies": {
-    "@sora/e2ee": "^2021.1.0-canary.1"
+    "@sora/e2ee": "^2021.1.0-canary.1",
+    "@sora/kohaku": "^2021.1.0-canary.1"
   }
 }
