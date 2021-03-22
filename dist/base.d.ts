@@ -1,4 +1,5 @@
 import { Callbacks, ConnectionOptions, JSONType, SignalingOfferMessage, SignalingUpdateMessage } from "./types";
+import Kohaku from "@sora/kohaku";
 import SoraE2EE from "@sora/e2ee";
 export default class ConnectionBase {
     role: string;
@@ -18,11 +19,14 @@ export default class ConnectionBase {
     protected ws: WebSocket | null;
     protected callbacks: Callbacks;
     protected e2ee: SoraE2EE | null;
+    protected kohaku: Kohaku | null;
     constructor(signalingUrl: string, role: string, channelId: string, metadata: JSONType, options: ConnectionOptions, debug: boolean);
     on<T extends keyof Callbacks, U extends Callbacks[T]>(kind: T, callback: U): void;
     disconnect(): Promise<[void, void, void]>;
     protected setupE2EE(): void;
     protected startE2EE(): void;
+    protected setupKohaku(): void;
+    protected startKohaku(): void;
     protected signaling(offer: RTCSessionDescriptionInit): Promise<SignalingOfferMessage>;
     protected createOffer(): Promise<RTCSessionDescriptionInit>;
     protected connectPeerConnection(message: SignalingOfferMessage): Promise<void>;

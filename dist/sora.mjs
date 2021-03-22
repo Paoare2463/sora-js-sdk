@@ -1049,6 +1049,112 @@ function trace(clientId, title, value) {
 class ConnectError extends Error {
 }
 
+/**
+ * @sora/kohaku
+ * Kohaku Library
+ * @version: 2021.1.0-canary.1
+ * @author: Shiguredo Inc.
+ * @license: Apache-2.0
+ **/
+
+// https://w3c.github.io/webrtc-stats/#certificatestats-dict*
+// interface RTCCertificate extends RTCStats {
+//   base64Certificate?: string;
+// }
+// https://w3c.github.io/webrtc-stats/#obsolete-rtcaudioreceiverstats-members
+// interface RTCAudioMediaStreamTrackReceiver extends RTCStats {
+//   jitterBufferDelay: number;
+//   jitterBufferEmittedCount: number;
+//   // custom attribute
+//   remoteConnectionId: string;
+//   currentJitterBufferDelay: number;
+// }
+// function parseRTCCertificate(currentState: RTCCertificate): RTCCertificate {
+//   delete currentState["base64Certificate"];
+//   return currentState;
+// }
+// function parseRTCAudioMediaStreamTrackReceiver(
+//   currentState: RTCAudioMediaStreamTrackReceiver,
+//   prevState: RTCAudioMediaStreamTrackReceiver | undefined
+// ): RTCAudioMediaStreamTrackReceiver {
+//   currentState.currentJitterBufferDelay = 0;
+//   currentState.remoteConnectionId = "";
+//   if (prevState) {
+//     const jitterBufferDelay = currentState.jitterBufferDelay - prevState.jitterBufferDelay;
+//     const jitterBufferEmittedCount = currentState.jitterBufferEmittedCount - prevState.jitterBufferEmittedCount;
+//     currentState.currentJitterBufferDelay = Math.floor((jitterBufferDelay / jitterBufferEmittedCount) * 1000);
+//   }
+//   return currentState;
+// }
+class Kohaku {
+    constructor(url, version) {
+        this.pc = null;
+        this.kohakuURL = url;
+        this.trackIdConnectionIdMap = {};
+        this.intervalId = null;
+        this.channelId = null;
+        this.connectionId = null;
+        this.clientId = null;
+        this.version = version;
+        this.prevStats = [];
+    }
+    start(channelId, connectionId, clientId, pc) {
+        this.pc = pc;
+        this.channelId = channelId;
+        this.connectionId = connectionId;
+        this.clientId = clientId;
+        this.intervalId = window.setInterval(() => {
+            this.postMetrics();
+        }, 5000);
+    }
+    stop() {
+        this.pc = null;
+        this.channelId = null;
+        this.connectionId = null;
+        this.clientId = null;
+        if (this.intervalId !== null) {
+            window.clearInterval(this.intervalId);
+        }
+    }
+    async postMetrics() {
+        const stats = await this.getStats();
+        if (this.channelId === null || this.connectionId === null || this.clientId === null) {
+            // TODO(yuito): 例外処理をいれる
+            console.warn(`Not enough parameters existed. channelId: ${this.channelId}, connectionId: ${this.connectionId}, clientId: ${this.clientId}`);
+            return;
+        }
+        await fetch(this.kohakuURL, {
+            method: "POST",
+            body: JSON.stringify({
+                version: this.version,
+                environment: "sora-js-sdk",
+                channel_id: this.channelId,
+                connection_id: this.connectionId,
+                client_id: this.clientId,
+                stats: stats,
+            }),
+            headers: {
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                "Content-Type": "application/json",
+            },
+            mode: "no-cors",
+        });
+    }
+    async getStats() {
+        // TODO(yuito): peerConnection の状態に応じて getStats を実行するかどうかを判断する
+        const stats = [];
+        if (!this.pc) {
+            return stats;
+        }
+        const reports = await this.pc.getStats();
+        const webrtcStats = [];
+        reports.forEach((state) => {
+            webrtcStats.push(state);
+        });
+        return webrtcStats;
+    }
+}
+
 class ConnectionBase {
     constructor(signalingUrl, role, channelId, metadata, options, debug) {
         this.role = role;
@@ -1082,6 +1188,7 @@ class ConnectionBase {
         };
         this.authMetadata = null;
         this.e2ee = null;
+        this.kohaku = null;
     }
     on(kind, callback) {
         // @deprecated message
@@ -1148,6 +1255,9 @@ class ConnectionBase {
             this.e2ee.terminateWorker();
             this.e2ee = null;
         }
+        if (this.kohaku) {
+            this.kohaku.stop();
+        }
         return Promise.all([closeStream, closeWebSocket, closePeerConnection]);
     }
     setupE2EE() {
@@ -1169,6 +1279,20 @@ class ConnectionBase {
             this.e2ee.clearWorker();
             const result = this.e2ee.start(this.connectionId);
             this.e2ee.postSelfSecretKeyMaterial(this.connectionId, result.selfKeyId, result.selfSecretKeyMaterial);
+        }
+    }
+    setupKohaku() {
+        if (this.options.kohakuURL) {
+            this.kohaku = new Kohaku(this.options.kohakuURL, "'2021.1.0-canary.1'");
+        }
+    }
+    startKohaku() {
+        if (this.kohaku &&
+            this.channelId !== null &&
+            this.connectionId !== null &&
+            this.clientId !== null &&
+            this.pc !== null) {
+            this.kohaku.start(this.channelId, this.connectionId, this.clientId, this.pc);
         }
     }
     signaling(offer) {
@@ -1346,6 +1470,8 @@ class ConnectionBase {
         return new Promise((resolve, reject) => {
             // connectionState が存在しない場合はそのまま抜ける
             if (this.pc && this.pc.connectionState === undefined) {
+                this.setupKohaku();
+                this.startKohaku();
                 resolve();
             }
             const timerId = setInterval(() => {
@@ -1363,6 +1489,8 @@ class ConnectionBase {
                 }
                 else if (this.pc && this.pc.connectionState === "connected") {
                     clearInterval(timerId);
+                    this.setupKohaku();
+                    this.startKohaku();
                     resolve();
                 }
             }, 100);

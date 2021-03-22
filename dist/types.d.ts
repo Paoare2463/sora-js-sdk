@@ -193,6 +193,7 @@ export declare type ConnectionOptions = {
     timeout?: number;
     e2ee?: boolean;
     signalingNotifyMetadata?: JSONType;
+    kohakuURL?: string;
 };
 export declare type Callbacks = {
     disconnect: (event: CloseEvent) => void;
