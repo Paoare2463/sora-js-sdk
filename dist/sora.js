@@ -1133,7 +1133,7 @@
 	            method: "POST",
 	            body: JSON.stringify({
 	                version: this.version,
-	                environment: window.navigator.userAgent.toLocaleLowerCase(),
+	                environment: window.navigator.userAgent,
 	                channel_id: this.channelId,
 	                connection_id: this.connectionId,
 	                client_id: this.clientId,
