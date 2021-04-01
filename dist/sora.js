@@ -1133,7 +1133,7 @@
 	            method: "POST",
 	            body: JSON.stringify({
 	                version: this.version,
-	                environment: "sora-js-sdk",
+	                environment: window.navigator.userAgent.toLocaleLowerCase(),
 	                channel_id: this.channelId,
 	                connection_id: this.connectionId,
 	                client_id: this.clientId,
